@@ -1,22 +1,35 @@
 import SwiftUI
-import Cocoa
+import SpriteKit
+
+var globalScale: CGFloat = 5.0;
+
 @main
-
-
 struct CuteCrittersApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    
-    // No main Window group needed if you’re doing a floating panel.
-    // You can optionally have other windows or a Settings scene if desired.
     var body: some Scene {
-        // Keep your Settings if you want:
-        Settings {
-            SettingsView() // Add the settings view here
-
+        WindowGroup {
+            ContentView()
         }
+        #if os(macOS)
+        Settings {
+            SettingsView()
+        }
+        #endif
     }
 }
 
+struct ContentView: View {
+    var body: some View {
+        GameView()
+            .edgesIgnoringSafeArea(.all)
+    }
+}
+
+struct GameView: View {
+    var body: some View {
+        SpriteKitContainer()
+            .edgesIgnoringSafeArea(.all)
+    }
+}
 
 struct SettingsView: View {
     @AppStorage("isDarkMode") private var isDarkMode = false
@@ -30,461 +43,419 @@ struct SettingsView: View {
     }
 }
 
+#if os(iOS)
+struct SpriteKitContainer: UIViewRepresentable {
+    func makeUIView(context: Context) -> SKView {
+           let skView = SKView()
+           let scene = GameScene(size: CGSize(width: 300, height: 360))
+           scene.scaleMode = .aspectFit
+           skView.presentScene(scene)
+           return skView
+       }
 
-
-extension NSCursor {
-    static func customCursor(named imageName: String, hotSpot: NSPoint) -> NSCursor? {
-        guard let cursorImage = NSImage(named: imageName) else { return nil }
-        return NSCursor(image: cursorImage, hotSpot: hotSpot)
-    }
+       func updateUIView(_ uiView: SKView, context: Context) {}
 }
+#endif
 
-
-class AppDelegate: NSObject, NSApplicationDelegate {
-    private var floatingWindowController: NSWindowController?
-    private var statusItem: NSStatusItem?
-
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        // Set the custom cursor globally
-        applyCustomCursor()
-        
-        NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .mouseEntered, .mouseExited]) { _ in
-                   self.applyCustomCursor()
-               }
-        
-         func applyCustomCursor() {
-               if let customCursor = NSCursor.customCursor(named: "cursor_1", hotSpot: NSPoint(x: 16, y: 16)) {
-                   customCursor.set()
-               }
-           }
-
-        // Create the status bar item
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let button = statusItem?.button {
-            // Set the cat sprite as the icon
-            button.image = NSImage(named: "cat_orange-idle_1") // Use your sprite name here
-            button.image?.size = NSSize(width: 18, height: 18) // Resize for the menu bar
-            button.image?.isTemplate = true // Ensure it adapts to light/dark mode
-
-            // Optional: Add a click action
-            button.action = #selector(statusBarItemClicked)
-            button.target = self
-        }
-
-        // Create your floating window as before
-        let contentView = FloatingWindowContentView()
-        let hostingView = NSHostingView(rootView: contentView)
-        hostingView.translatesAutoresizingMaskIntoConstraints = false
-
-        let window = CustomWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 300, height: 360),
-            styleMask: [.borderless, .fullSizeContentView],
-            backing: .buffered,
-            defer: false
-        )
-
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        window.titleVisibility = .visible
-        window.titlebarAppearsTransparent = true
-        window.hasShadow = true
-        window.isMovableByWindowBackground = true
-
-        // Set the window level and behavior
-        window.level = NSWindow.Level(Int(CGWindowLevelForKey(.maximumWindow)) + 1)
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-
-        window.contentView = hostingView
-
-        floatingWindowController = NSWindowController(window: window)
-        floatingWindowController?.showWindow(nil)
-
-        NSApp.activate(ignoringOtherApps: true)
-    }
-    
-
-    @objc func statusBarItemClicked() {
-        guard let window = floatingWindowController?.window else { return }
-
-        if window.isVisible {
-            // Hide the window
-            window.orderOut(nil)
-        } else {
-            // Show the window
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true) // Bring the app to the foreground if needed
-        }
-    }
-
-    private func applyCustomCursor() {
-        if let customCursor = NSCursor.customCursor(named: "cursor_1", hotSpot: NSPoint(x: 16, y: 16)) {
-            customCursor.set() // Set the custom cursor globally
-        }
-    }
-}
-
-extension Color {
-    init(hex: String) {
-        let hex = hex.trimmingCharacters(in: .whitespacesAndNewlines)
-                      .replacingOccurrences(of: "#", with: "")
-        let scanner = Scanner(string: hex)
-        var rgb: UInt64 = 0
-        scanner.scanHexInt64(&rgb)
-        
-        let r = Double((rgb >> 16) & 0xFF) / 255.0
-        let g = Double((rgb >> 8) & 0xFF) / 255.0
-        let b = Double(rgb & 0xFF) / 255.0
-
-        self.init(.sRGB, red: r, green: g, blue: b)
-    }
-}
-
-struct FloatingWindowContentView: View {
-    @AppStorage("isDarkMode") private var isDarkMode = false
-
-    var body: some View {
-            ZStack {
-                // Main content
-                CritterView(isDarkMode: isDarkMode) // Pass the mode state
-            }
-            .frame(width: 300, height: 360)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(isDarkMode ? Color(hex: "#1c1c1e") : Color(hex: "#f8f8f8")) // Dark/light mode background
-                    .shadow(color: isDarkMode ? Color(hex: "#111111") : Color(hex: "#e0e0e0"), radius: 6, x: 0, y: 0)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .padding(10)
-            .toolbar {
-                ToolbarItem(placement: .automatic) {
-                    Toggle(isOn: $isDarkMode) {
-                        Text("Dark Mode")
-                    }
-                }
-            }
-        }
-}
-
-
-
-class CustomWindow: NSWindow {
-    override var canBecomeKey: Bool {
-        return true
-    }
-}
-
-// MARK: - The VisualEffectBlur View
-struct VisualEffectBlur: NSViewRepresentable {
-    var material: NSVisualEffectView.Material
-    var blendingMode: NSVisualEffectView.BlendingMode
-    var state: NSVisualEffectView.State = .active
-    
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material = material
-        view.blendingMode = blendingMode
-        view.state = state
-        view.isEmphasized = true    // Helps ensure it's visible on light/dark backgrounds
-        return view
-    }
-    
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
-        nsView.material = material
-        nsView.blendingMode = blendingMode
-        nsView.state = state
-        nsView.isEmphasized = true
-    }
-}
-
-struct CritterView: View {
-    // MARK: - States
-    let isDarkMode: Bool
-
-    @State private var orangeCatPosition: CGFloat = 0
-    @State private var targetPosition: CGFloat = 0
-    @State private var isIdle: Bool = true
-    @State private var showThought: Bool = false
-    @State private var currentFrameIndex: Int = 0
-    @State private var facingRight: Bool = true
-    
-    // Clouds
-    @State private var cloud1Offset: CGFloat = -300 // Starting position for Cloud 1
-    @State private var cloud2Offset: CGFloat = -600 // Starting position for Cloud 2
-
-    // Timers
-    @State private var walkTimer: Timer?
-    @State private var idleTimer: Timer?
-
-    // MARK: - Sprites
-    let orangeCatWalkFrames = [
-        "cat_orange-move_1", // walk 1
-        "cat_orange-move_2", // jump up
-        "cat_orange-move_3", // jump down
-        "cat_orange-move_4" // walk 2
-    ]
-    let orangeCatIdleFrames = [
-        "cat_orange-idle_1",
-        "cat_orange-idle_2",
-        "cat_orange-idle_3"
-    ]
-
-    // MARK: - Body
-    var body: some View {
-        
-            
-            ZStack {
-                LinearGradient(
-                                gradient: Gradient(colors: isDarkMode ? [Color.black, Color.gray] : [Color.blue.opacity(0.8), Color.white.opacity(0.5)]),
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                
-              
-                
-                // Moving Clouds
-                Group {
-                    Image("cloud") // Replace with your cloud image asset name
-                        .resizable()
-                        .interpolation(.none) // Keep pixel art crisp
-                        .scaledToFit()
-                        .frame(width: 100) // Size of Cloud 1
-                        .offset(x: cloud1Offset, y: -120) // Position for Cloud 1
-                    
-                    Image("cloud") // Replace with your cloud image asset name
-                        .interpolation(.none) // Keep pixel art crisp
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 140) // Size of Cloud 2
-                        .offset(x: cloud2Offset, y: -150) // Position for Cloud 2
-                }
-                .onAppear {
-                    startCloudAnimations()
-                }
-                
-                VStack(spacing: 0) {
-                    ZStack(alignment: .bottom) {
-                        Image("Mountain_medium_snowy_2")
-                        
-                            .interpolation(.none) // Keep pixel art crisp
-                            .resizable()
-                            .scaledToFit()
-                        
-                            .offset( y: 0) // Adjust position to sit above the grass
-                        
-                        
-                        // Tree
-                        Image("tree")
-                            .interpolation(.none) // Keep pixel art crisp
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 36 * 3, height: 50 * 3) // Tree size
-                            .offset(x: -90, y: 0) // Adjust position to sit above the grass
-                        
-                        Image("Tree_winter_medium_background_2")
-                            .interpolation(.none) // Keep pixel art crisp
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 36 * 3, height: 50 * 3) // Tree size
-                            .offset(x: CGFloat(30.0), y: 0) // Adjust position to sit above the grass
-                        
-                        Image("Grass_small_1")
-                        
-                            .interpolation(.none) // Keep pixel art crisp
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 6*3, height: 4*3) // Tree size
-                            .offset( x: 100, y: 0) // Adjust position to sit above the grass
-                        
-                        Image("Grass_small_1")
-                        
-                            .interpolation(.none) // Keep pixel art crisp
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 6*3, height: 4*3) // Tree size
-                            .offset( x: 40, y: 0) // Adjust position to sit above the grass
-                        
-                        Image("Flower_purple_small")
-                        
-                            .interpolation(.none) // Keep pixel art crisp
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 6*4, height: 4*4) // Tree size
-                            .offset( x: -80, y: 0) // Adjust position to sit above the grass
-                        
-                        Image("Grass_large_1")
-                        
-                            .interpolation(.none) // Keep pixel art crisp
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 9*4, height: 7*4) // Tree size
-                            .offset( x: 70, y: 0) // Adjust position to sit above the grass
-                        
-                        Image("Grass_large_1")
-                        
-                            .interpolation(.none) // Keep pixel art crisp
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 9*4, height: 7*4) // Tree size
-                            .offset( x: -20, y: 0) // Adjust position to sit above the grass
-                        
-                        
-                        
-                        // Critter Sprite
-                        Image(currentFrameImage)
-                            .resizable()
-                            .interpolation(.none) // Keep pixel art crisp
-                            .scaledToFit()
-                            .frame(width: 40, height: 40)
-                            .scaleEffect(x: facingRight ? 1 : -1, y: 1)
-                            .offset(x: orangeCatPosition, y: 0)
-                            .onTapGesture {
-                                showThoughtBubble()
-                            }
-                            .onAppear {
-                                beginIdleMode()
-                            }
-                        
-                        ZStack {
-                            // Chat bubble image
-                            Image("ChatBubble_white")  // Replace with your bubble image name
-                                .interpolation(.none)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 60, height: 60)
-                            
-                            // Heart image nested inside
-                            Image("heart")
-                                .interpolation(.none)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 20, height: 20)  // Make heart smaller than bubble
-                                // Adjust these offset values to center the heart in the bubble
-                                .offset(x: 0, y: 0)
-                        }
-                        .offset(x: orangeCatPosition + 36, y: -16)  // Position entire bubble above cat
-                        .transition(.opacity)
-                        .animation(.easeOut, value: showThought)
-                        .opacity(showThought ? 1 : 0)
-                        
-                      
-                        
-                    }
-                    
-                    // Grass Floor
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(
-                            LinearGradient(
-                                gradient: Gradient(colors: [Color.green.opacity(0.8), Color.green.opacity(0.4)]),
-                                startPoint: .bottom,
-                                endPoint: .top
-                            )
-                        )
-                        .frame(height: 10 ) // Grass height
-                        .shadow(color: .black.opacity(0.2), radius: 5, x: 0, y: 2)
-                }
-              
-            }
-            .frame( width:300,height: 360)
-        
-    }
-    
-    // MARK: - Cloud Animation
-      private func startCloudAnimations() {
-          // Cloud 1 Animation
-          withAnimation(
-              Animation.linear(duration: 200) // Slower speed for Cloud 1
-                  .repeatForever(autoreverses: false)
-          ) {
-              cloud1Offset = 400 // End position for Cloud 1
-          }
-
-          // Cloud 2 Animation
-          withAnimation(
-              Animation.linear(duration: 300) // Even slower speed for Cloud 2
-                  .repeatForever(autoreverses: false)
-          ) {
-              cloud2Offset = 500 // End position for Cloud 2
-          }
+#if os(macOS)
+struct SpriteKitContainer: NSViewRepresentable {
+    func makeNSView(context: Context) -> SKView {
+          let skView = SKView()
+          let scene = CritterGameScene(size: CGSize(width: 300, height: 360))
+          scene.scaleMode = .aspectFit
+          skView.presentScene(scene)
+          return skView
       }
 
-    // MARK: - Current Frame
-    var currentFrameImage: String {
-        if isIdle {
-            return orangeCatIdleFrames[currentFrameIndex % orangeCatIdleFrames.count]
-        } else {
-            return orangeCatWalkFrames[currentFrameIndex % orangeCatWalkFrames.count]
+      func updateNSView(_ nsView: SKView, context: Context) {}
+}
+#endif
+
+extension SKSpriteNode {
+    func alignBottom(to y: CGFloat) {
+        let scaledHeight = self.size.height * self.yScale
+        self.position.y = y + (scaledHeight / 2)
+    }
+}
+
+
+
+
+
+// MARK: - Game Scene
+class GameScene: SKScene {
+    private var cat: SKSpriteNode!
+    private var clouds: [SKSpriteNode] = []
+    private var grassBase: SKSpriteNode! // Solid green rectangle
+    private var decorativeGrass: [SKSpriteNode] = [] // Grass sprites on top
+    private var trees: [SKSpriteNode] = []
+    private var mountains: SKSpriteNode!
+    
+    private var currentCatFrameIndex: Int = 0
+    private var isCatIdle: Bool = true
+    private var catFacingRight: Bool = true
+    
+    private var movingRight = true
+    private var isMoving = false
+    private let movementBoundaryLeft: CGFloat = 50
+    private let movementBoundaryRight: CGFloat = 250
+    
+    private let grassHeight: CGFloat = 40 // Define grass height constant
+    
+    
+    private var lastFrameTime: TimeInterval = 0
+    private var frameInterval: TimeInterval = 0.2 // Time between frames
+    
+    
+    private var fpsLabel: SKLabelNode! // FPS counter
+        
+        private var lastUpdateTime: TimeInterval = 0
+        private var frameCount: Int = 0
+        private var elapsedTime: TimeInterval = 0
+    
+    private func setupFPSLabel() {
+           fpsLabel = SKLabelNode(fontNamed: "Menlo")
+           fpsLabel.fontSize = 16
+           fpsLabel.fontColor = .white
+           fpsLabel.horizontalAlignmentMode = .left
+           fpsLabel.verticalAlignmentMode = .top
+           fpsLabel.position = CGPoint(x: 10, y: size.height - 10) // Top-left corner
+           fpsLabel.zPosition = 10
+           addChild(fpsLabel)
+       }
+    
+    
+    
+#if os(iOS)
+override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+    guard let touch = touches.first else { return }
+    let location = touch.location(in: self)
+    handleInput(at: location)
+}
+#endif
+
+#if os(macOS)
+override func mouseDown(with event: NSEvent) {
+    let location = event.location(in: self)
+    handleInput(at: location)
+}
+#endif
+    
+    
+    private func handleInput(at location: CGPoint) {
+        // Check if the tap/click is on the cat
+        if cat.contains(location) {
+            showThoughtBubble()
         }
     }
+    
+    private var thoughtBubble: SKNode!
+    private var showThought: Bool = false
+    
+    private func setupThoughtBubble() {
+        // Create bubble container
+        thoughtBubble = SKNode()
+        thoughtBubble.position = CGPoint(x: 10, y: 4) //since it's appending to cat be 10 px above
+        thoughtBubble.zPosition = 10 // Ensure it's above other elements
+        thoughtBubble.alpha = 0 // Initially invisible
+        
+        // Bubble sprite
+        let bubbleImage = SKSpriteNode(imageNamed: "ChatBubble_white")
+        bubbleImage.setScale(0.5)
+        bubbleImage.texture?.filteringMode = .nearest
+        bubbleImage.position = .zero
+        
+        // Heart sprite
+        let heartImage = SKSpriteNode(imageNamed: "heart")
+        heartImage.setScale(0.4)
+        heartImage.position = .zero
+        heartImage.texture?.filteringMode = .nearest
 
-    // MARK: - Idle / Walk Logic
+        
+        // Add sprites to bubble container
+        thoughtBubble.addChild(bubbleImage)
+        thoughtBubble.addChild(heartImage)
+        
+        // Attach bubble to cat
+        cat.addChild(thoughtBubble)
+    }
+    
+    private func showThoughtBubble() {
+        
+        if showThought { return } // Avoid overlapping animations
+        showThought = true
+        
+        print("Shwoing thought bubble")
 
-    func beginIdleMode() {
-        isIdle = true
-        stopWalkTimer()
 
-        // Start the idle animation timer
-        idleTimer?.invalidate()
-        idleTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            currentFrameIndex += 1
+        // Show bubble with fade-in effect
+        let fadeIn = SKAction.fadeAlpha(to: 1, duration: 0.2)
+        thoughtBubble.run(fadeIn)
+        
+        // Schedule bubble to disappear after 2 seconds
+        let wait = SKAction.wait(forDuration: 2.0)
+        let fadeOut = SKAction.fadeAlpha(to: 0, duration: 0.2)
+        let resetState = SKAction.run { [weak self] in
+            self?.showThought = false
         }
-
-        // After some random idle time, pick a new target to walk to
-        let randomIdleTime = Double.random(in: 2...5)
-        DispatchQueue.main.asyncAfter(deadline: .now() + randomIdleTime) {
-            chooseNewTarget()
-            beginWalkMode()
-        }
+        let sequence = SKAction.sequence([wait, fadeOut, resetState])
+        thoughtBubble.run(sequence)
     }
 
-    func beginWalkMode() {
-        isIdle = false
-        stopIdleTimer()
+    override func update(_ currentTime: TimeInterval) {
+            super.update(currentTime)
 
-        // Decide facing direction
-        facingRight = targetPosition > orangeCatPosition
+            if lastUpdateTime == 0 {
+                lastUpdateTime = currentTime
+            }
 
-        // Start the walk animation timer
-        walkTimer?.invalidate()
-        walkTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { _ in
-            currentFrameIndex += 1
-            moveToTarget()
-        }
-    }
+            // Calculate delta time and increment counters
+            let deltaTime = currentTime - lastUpdateTime
+            lastUpdateTime = currentTime
+            elapsedTime += deltaTime
+            frameCount += 1
 
-    func moveToTarget() {
-        let dx = targetPosition - orangeCatPosition
-        if abs(dx) < 2 {
-            orangeCatPosition = targetPosition
-            beginIdleMode()
-        } else {
-            orangeCatPosition += (dx > 0) ? 2 : -2
-        }
-    }
+            // Update FPS every second
+            if elapsedTime >= 1.0 {
+                let fps = Int(Double(frameCount) / elapsedTime)
+                fpsLabel.text = "FPS: \(fps)"
+                frameCount = 0
+                elapsedTime = 0
+            }
 
-    func chooseNewTarget() {
-        targetPosition = CGFloat.random(in: -80...80)
-    }
-
-    // MARK: - Timer Management
-    func stopWalkTimer() {
-        walkTimer?.invalidate()
-        walkTimer = nil
-    }
-
-    func stopIdleTimer() {
-        idleTimer?.invalidate()
-        idleTimer = nil
-    }
-
-    // MARK: - Thought Bubble
-    func showThoughtBubble() {
-        withAnimation {
-            showThought = true
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            withAnimation {
-                showThought = false
+            // Update animations
+            if deltaTime >= frameInterval {
+                if isMoving {
+                    updateWalkingAnimation()
+                } else {
+                    updateIdleAnimation()
+                }
             }
         }
+    
+    private func startNaturalMovement() {
+        guard !isMoving else { return } // Avoid overlapping movements
+        isMoving = true
+        
+        // Choose a random target within boundaries
+        let targetX = CGFloat.random(in: movementBoundaryLeft...movementBoundaryRight)
+        let moveDuration = TimeInterval(abs(cat.position.x - targetX) / 50.0) // Adjust speed (50 points/sec)
+        
+        // Determine direction and update facing
+        if targetX > cat.position.x {
+            cat.xScale = globalScale // Face right
+        } else {
+            cat.xScale = -globalScale // Face left
+        }
+        
+        // Start walking animation
+        startWalkingAnimation()
+        
+        // Move to target position
+        let moveAction = SKAction.moveTo(x: targetX, duration: moveDuration)
+        cat.run(moveAction) { [weak self] in
+            guard let self = self else { return }
+            self.isMoving = false
+            self.startIdleAnimation() // Rest after reaching position
+            
+            // Random rest duration before moving again
+            let restDuration = TimeInterval.random(in: 2.0...4.0)
+            self.run(SKAction.wait(forDuration: restDuration)) {
+                self.startNaturalMovement() // Start moving again
+            }
+        }
+    }
+
+    private func startWalkingAnimation() {
+        cat.removeAction(forKey: "idle") // Stop idle animation if running
+        let walkAction = SKAction.animate(with: catWalkFrames, timePerFrame: 0.2)
+        cat.run(SKAction.repeatForever(walkAction), withKey: "walk")
+    }
+
+    private func startIdleAnimation() {
+        cat.removeAction(forKey: "walk") // Stop walking animation if running
+        let idleAction = SKAction.animate(with: catIdleFrames, timePerFrame: 0.5)
+        cat.run(SKAction.repeatForever(idleAction), withKey: "idle")
+    }
+        
+        private func updateIdleAnimation() {
+            currentCatFrameIndex = (currentCatFrameIndex + 1) % catIdleFrames.count
+            cat.texture = catIdleFrames[currentCatFrameIndex]
+        }
+        
+        private func updateWalkingAnimation() {
+            currentCatFrameIndex = (currentCatFrameIndex + 1) % catWalkFrames.count
+            cat.texture = catWalkFrames[currentCatFrameIndex]
+        }
+        
+    
+    private let catIdleFrames: [SKTexture] = {
+        let frames = [
+            "cat_orange-idle_1",
+            "cat_orange-idle_2",
+            "cat_orange-idle_3"
+        ].map { SKTexture(imageNamed: $0) }
+        frames.forEach { $0.filteringMode = .nearest }
+        return frames
+    }()
+    
+    private let catWalkFrames: [SKTexture] = {
+        let frames = [
+            "cat_orange-move_1",
+            "cat_orange-move_2",
+            "cat_orange-move_3",
+            "cat_orange-move_4"
+        ].map { SKTexture(imageNamed: $0) }
+        frames.forEach { $0.filteringMode = .nearest }
+        return frames
+    }()
+    
+    override func didMove(to view: SKView) {
+        setupFPSLabel()
+        setupBackground()
+        setupGrass()
+        setupMountains()
+        setupTrees()
+        setupCat()
+        setupClouds()
+        setupThoughtBubble()
+
+        startNaturalMovement() // Start the AI behavior loop
+
+    }
+    
+    private func setupBackground() {
+        let gradientTexture = SKTexture.gradientTexture(
+            size: size,
+            colors: [UIColor(red: 52/255.0, green: 107/255.0, blue: 211/255.0, alpha: 1.0).cgColor, UIColor(red: 143/255.0, green: 211/255.0, blue: 255/255.0, alpha: 1.0).cgColor],
+            locations: [0.0, 1.0]
+        )
+        let background = SKSpriteNode(texture: gradientTexture)
+        background.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        background.zPosition = -2
+        addChild(background)
+    }
+    
+    private func setupGrass() {
+        // Create the solid grass base rectangle
+        grassBase = SKSpriteNode(color: UIColor(red: 30/255, green: 188/255, blue: 115/255, alpha: 1.0),
+                                 size: CGSize(width: size.width, height: grassHeight))
+        grassBase.position = CGPoint(x: size.width / 2, y: grassHeight / 2)
+        grassBase.zPosition = -1
+        
+       
+        addChild(grassBase)
+        
+        // Add decorative grass sprites on top
+        for i in 0..<3 {
+            let grassSprite = SKSpriteNode(imageNamed: "Grass_large_1")
+            grassSprite.texture?.filteringMode = .nearest
+            grassSprite.setScale(4)
+            grassSprite.position = CGPoint(x: CGFloat(80 + (i * 100)), y: grassHeight + (grassSprite.size.height / 2))
+            grassSprite.zPosition = 2
+            decorativeGrass.append(grassSprite)
+            addChild(grassSprite)
+        }
+        
+        let smallGrass = [
+            "Grass_small_1",
+            "Grass_small_2",
+            "Grass_small_3",
+
+        ]
+        
+        // Add decorative grass sprites on top
+        for i in 1..<5 {
+            print(smallGrass[(i % smallGrass.count)])
+            let grassSprite = SKSpriteNode(imageNamed: smallGrass[(i % smallGrass.count)])
+            grassSprite.texture?.filteringMode = .nearest
+            grassSprite.setScale(4)
+            grassSprite.position = CGPoint(x: CGFloat(0 + (i * 100)), y: grassHeight + (grassSprite.size.height / 2))
+            grassSprite.zPosition = 2
+            decorativeGrass.append(grassSprite)
+            addChild(grassSprite)
+        }
+    }
+    
+    private func setupMountains() {
+        mountains = SKSpriteNode(imageNamed: "Mountain_medium_snowy_2")
+        mountains.setScale(2.5)
+        mountains.texture?.filteringMode = .nearest
+        mountains.position = CGPoint(x: size.width / 2, y: grassHeight + mountains.size.height/2)
+        mountains.zPosition = 0
+        addChild(mountains)
+    }
+    
+    private func setupTrees() {
+        let treePositions = [
+            CGPoint(x: 50, y: 0),
+            CGPoint(x: 200, y: 0)
+        ]
+        
+        for position in treePositions {
+            let tree = SKSpriteNode(imageNamed: "tree")
+            tree.setScale(3)
+            tree.texture?.filteringMode = .nearest
+            tree.position = position
+            tree.zPosition = 1
+            tree.position.y = grassHeight + (tree.size.height / 2);
+            trees.append(tree)
+            addChild(tree)
+        }
+    }
+    
+    private func setupCat() {
+        cat = SKSpriteNode(texture: catIdleFrames[0])
+        cat.setScale(globalScale)
+        cat.position = CGPoint(x: size.width / 2, y: grassHeight + (cat.size.height / 2))
+        cat.zPosition = 2
+        addChild(cat)
+        startCatIdleAnimation()
+    }
+    
+    private func startCatIdleAnimation() {
+        let idleAction = SKAction.animate(with: catIdleFrames, timePerFrame: 0.5)
+        let repeatAction = SKAction.repeatForever(idleAction)
+        cat.run(repeatAction, withKey: "idle")
+    }
+    
+    private func setupClouds() {
+        for i in 0...1 {
+            let cloud = SKSpriteNode(imageNamed: "cloud")
+            cloud.texture?.filteringMode = .nearest
+            cloud.setScale(3)
+            cloud.position = CGPoint(x: -100 - CGFloat(i * 200), y: size.height - CGFloat(50 + i * 30))
+            cloud.zPosition = -1
+            clouds.append(cloud)
+            addChild(cloud)
+            
+            let moveRight = SKAction.moveBy(x: size.width + 200, y: 0, duration: 50)
+            let resetPosition = SKAction.moveBy(x: -(size.width + 200), y: 0, duration: 0)
+            let sequence = SKAction.sequence([moveRight, resetPosition])
+            cloud.run(SKAction.repeatForever(sequence))
+        }
+    }
+    
+ 
+}
+
+extension SKTexture {
+    static func gradientTexture(size: CGSize, colors: [CGColor], locations: [CGFloat]) -> SKTexture {
+        let contextSize = CGSize(width: size.width, height: size.height)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        UIGraphicsBeginImageContextWithOptions(contextSize, false, 1.0)
+        guard let context = UIGraphicsGetCurrentContext() else {
+            return SKTexture()
+        }
+
+        let gradient = CGGradient(colorsSpace: colorSpace, colors: colors as CFArray, locations: locations)!
+        let startPoint = CGPoint(x: 0, y: contextSize.height)
+        let endPoint = CGPoint(x: 0, y: 0)
+
+        context.drawLinearGradient(gradient, start: startPoint, end: endPoint, options: [])
+        let image = UIGraphicsGetImageFromCurrentImageContext()!
+        UIGraphicsEndImageContext()
+
+        return SKTexture(image: image)
     }
 }
