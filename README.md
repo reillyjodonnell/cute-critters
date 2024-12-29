@@ -1,5 +1,5 @@
 # CuteCrittersApp README
-
+`/Applications/Aseprite.app/Contents/MacOS/aseprite ~/Downloads/test.ase --save-as gray-panel/{slice}.png --split-slices`
 ## Overview
 **CuteCrittersApp** is a macOS application built using Swift and SwiftUI. 
 
